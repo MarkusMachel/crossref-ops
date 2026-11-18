@@ -19,11 +19,11 @@ use APP\plugins\generic\crossref\CrossrefExportDeployment;
 use APP\plugins\generic\crossref\filter\PreprintCrossrefXmlFilter;
 use DOMDocument;
 use Mockery;
-use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\DataProvider;
 use PKP\tests\PKPTestCase;
 
-#[CoversClass(PreprintCrossrefXmlFilter::class)]
+/**
+ * @covers \APP\plugins\generic\crossref\filter\PreprintCrossrefXmlFilter
+ */
 class TitleFaceMarkupTest extends PKPTestCase
 {
     private PreprintCrossrefXmlFilter $filter;
@@ -68,7 +68,9 @@ class TitleFaceMarkupTest extends PKPTestCase
         ];
     }
 
-    #[DataProvider('titleProvider')]
+    /**
+     * @dataProvider titleProvider
+     */
     public function testAppendFaceMarkup(string $html, string $expected): void
     {
         $this->assertSame($expected, $this->createTitleContent($html));
