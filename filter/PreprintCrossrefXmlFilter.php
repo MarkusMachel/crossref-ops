@@ -20,6 +20,7 @@ use APP\plugins\generic\crossref\CrossrefExportDeployment;
 use APP\publication\Publication;
 use PKP\context\Context;
 use DOMDocument;
+use DOMElement;
 use PKP\core\Dispatcher;
 use PKP\i18n\LocaleConversion;
 use PKP\submission\PKPSubmission;
@@ -258,10 +259,10 @@ class PreprintCrossrefXmlFilter extends \PKP\plugins\importexport\native\filter\
         // Titles
         $titlesNode = $doc->createElementNS($deployment->getNamespace(), 'titles');
         $titlesNode->appendChild($node = $doc->createElementNS($deployment->getNamespace(), 'title'));
-        $node->appendChild($doc->createTextNode($publication->getLocalizedTitle($submission->getData('locale'), 'html')));
+        $this->appendFaceMarkup($doc, $node, $publication->getLocalizedTitle($submission->getData('locale'), 'html'));
         if ($subtitle = $publication->getLocalizedSubTitle($submission->getData('locale'), 'html')) {
             $titlesNode->appendChild($node = $doc->createElementNS($deployment->getNamespace(), 'subtitle'));
-            $node->appendChild($doc->createTextNode($publication->getLocalizedTitle($subtitle, 'html')));
+            $this->appendFaceMarkup($doc, $node, $subtitle);
         }
         $postedContentNode->appendChild($titlesNode);
 
@@ -405,5 +406,51 @@ class PreprintCrossrefXmlFilter extends \PKP\plugins\importexport\native\filter\
         }
 
         return $dispatcher;
+    }
+
+    /**
+     * Append stored HTML (e.g. a publication title) to a node as Crossref face markup.
+     *
+     * The inline tags Crossref accepts (b, i, u, sup, sub) are kept as elements,
+     * strong and em become b and i, any other tag is dropped and its text kept.
+     * Text is decoded by the HTML parser and escaped once when the document is written.
+     */
+    public function appendFaceMarkup(DOMDocument $doc, DOMElement $parent, string $html): void
+    {
+        if ($html === '') {
+            return;
+        }
+        $source = new DOMDocument();
+        $previous = libxml_use_internal_errors(true);
+        $source->loadHTML('<?xml encoding="UTF-8"><body>' . $html . '</body>', LIBXML_NONET);
+        libxml_clear_errors();
+        libxml_use_internal_errors($previous);
+        $body = $source->getElementsByTagName('body')->item(0);
+        if ($body) {
+            $this->copyFaceMarkup($doc, $parent, $body);
+        }
+    }
+
+    /**
+     * Copy the children of an HTML node into a Crossref node, see appendFaceMarkup().
+     */
+    private function copyFaceMarkup(DOMDocument $doc, DOMElement $parent, \DOMNode $from): void
+    {
+        /** @var CrossrefExportDeployment $deployment */
+        $deployment = $this->getDeployment();
+        $faces = ['b' => 'b', 'strong' => 'b', 'i' => 'i', 'em' => 'i', 'u' => 'u', 'sup' => 'sup', 'sub' => 'sub'];
+        foreach ($from->childNodes as $child) {
+            if ($child instanceof \DOMText) {
+                $parent->appendChild($doc->createTextNode($child->nodeValue));
+            } elseif ($child instanceof DOMElement) {
+                $face = $faces[strtolower($child->nodeName)] ?? null;
+                if ($face) {
+                    $parent->appendChild($node = $doc->createElementNS($deployment->getNamespace(), $face));
+                    $this->copyFaceMarkup($doc, $node, $child);
+                } else {
+                    $this->copyFaceMarkup($doc, $parent, $child);
+                }
+            }
+        }
     }
 }
